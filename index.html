@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>canvas手写签名-原生js-类实现</title>
+  <style>
+    #canvas {
+      background-color: #ddd;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" width="400" height="300"></canvas>
+  <div>
+    <button id="prev">上一步</button>
+    <button id="reset">重写</button>
+    <button id="save">保存</button>
+  </div>
+  <script>
+    class Sign {
+      constructor(
+        el,
+        {
+          lineWidth = 3,
+          lineColor = "#000",
+          onRendered,
+          onDownload
+        }
+      ) {
+        this.el = el;
+        this.ctx = el.getContext("2d");
+
+        // 定义线条的宽度，即画笔的粗细
+        this.ctx.lineWidth = lineWidth;
+        // 定义画笔的颜色
+        this.ctx.strokeStyle = lineColor;
+
+        this.isDown = false;
+        this.points = [];
+        this.allPoints = [];
+        this.onDownload = onDownload || (() => {});
+        typeof onRendered === 'function' && onRendered(el);
+        this.init();
+      }
+      init() {
+        this.el.addEventListener(
+          "mousedown",
+          ({ x, y }) => {
+            this.isDown = true;
+            this.points.push({ x, y });
+            // 创建一个新的路径
+            this.ctx.beginPath();
+          },
+          false
+        );
+
+        this.el.addEventListener(
+          "mousemove",
+          ({ x, y }) => {
+            // 没有按下就不管
+            if (!this.isDown) return;
+            // 每次都取最后一个点，作为绘制的起点
+            const lastPoint = this.points.at(-1);
+            this.draw(lastPoint.x, lastPoint.y, x, y);
+            // 把当前的点保存起来，又作为下一次绘制的起点
+            this.points.push({ x, y });
+          },
+          false
+        );
+
+        this.el.addEventListener(
+          "mouseup",
+          (e) => {
+            this.isDown = false;
+            // 关闭路径
+            this.ctx.closePath();
+
+            // 鼠标抬起，说明当前这一笔就结束了，把这一笔的所有点的数组放到总的里面
+            this.allPoints.push(this.points);
+            // 清空这一笔画，为下一笔画做准备
+            this.points = [];
+          },
+          false
+        );
+
+        this.el.addEventListener("mouseleave", () => {
+          this.isDown = false;
+          this.ctx.closePath();
+          if (this.points.length) {
+            this.allPoints.push(this.points);
+          }
+          this.points = [];
+        });
+      }
+      draw(startX, startY, endX, endY) {
+        // 执行绘制
+        // 起点
+        this.ctx.moveTo(startX, startY);
+        // 终点
+        this.ctx.lineTo(endX, endY);
+        // 调用 stroke，即可看到绘制的线条
+        this.ctx.stroke();
+      }
+      resetPath() {
+        this.ctx.clearRect(0, 0, this.el.width, this.el.height);
+      }
+
+      prev() {
+        this.resetPath();
+        // 删除最后一个笔画
+        this.allPoints.pop();
+        // 遍历所有的笔画并重新绘制
+        // allPoints 是个二维数组
+        this.allPoints.forEach((ps) => {
+          ps.forEach((item, index) => {
+            // 下一个坐标点
+            let next = ps[index + 1];
+            if (next) {
+              // 有下一个点才执行，否则到最后一个会报错
+              // 开始重新绘制
+              this.ctx.beginPath();
+              this.draw(item.x, item.y, next.x, next.y);
+              this.ctx.closePath();
+            }
+          });
+        });
+      }
+
+      reset() {
+        this.resetPath();
+        this.allPoints = [];
+      }
+
+      save() {
+        // 使用canvas的toDataURL()方法，将画布内容转换为base64格式的图片数据:
+        let imgData = this.el.toDataURL("image/png");
+        this.onDownload(imgData);
+      }
+    }
+
+    window.onload = () => {
+      const sign = new Sign(document.getElementById("canvas"), {
+        onRendered: function (canvas) {},
+        onDownload: function (url) {
+          // 保存的时候执行
+          // 创建下载链接
+          let link = document.createElement("a");
+          link.download = "picture.png";
+          link.href = url;
+          // 触发点击
+          link.click();
+        }
+      });
+
+      document.getElementById("prev").addEventListener("click", () => {
+        sign.prev();
+      });
+      document.getElementById("reset").addEventListener("click", () => {
+        sign.reset();
+      });
+      document.getElementById("save").addEventListener("click", () => {
+        sign.save();
+      });
+    }
+  </script>
+</body>
+</html>
